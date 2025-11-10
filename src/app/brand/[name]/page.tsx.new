@@ -1,0 +1,190 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useParams } from 'next/navigation'
+import { CeramicProduct } from '@/types/product'
+import { supabase } from '@/lib/supabase'
+import ProductGrid from '@/components/ProductGrid'
+
+const getPatternForBrand = (brandName: string): { pattern: string; color: string } => {
+  const patterns = [
+    { pattern: 'diagonal-lines', color: '#FDF2F8' }, // Pink soft
+    { pattern: 'dots', color: '#F0FDF4' },          // Green soft
+    { pattern: 'hexagons', color: '#F0F9FF' },      // Blue soft
+    { pattern: 'waves', color: '#FDF4FF' },         // Purple soft
+    { pattern: 'squares', color: '#FFF7ED' },       // Orange soft
+    { pattern: 'circles', color: '#FEFCE8' }        // Yellow soft
+  ]
+  
+  const hash = brandName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+  const index = hash % patterns.length
+  
+  return patterns[index]
+}
+
+export default function BrandPage() {
+  const params = useParams()
+  const brandName = (params.name as string).replace(/-/g, ' ').toUpperCase()
+  const { pattern, color } = getPatternForBrand(brandName)
+  
+  const [loading, setLoading] = useState(true)
+  const [filterOptions, setFilterOptions] = useState<Record<string, string[]>>({
+    ukuran: [],
+    finish: [],
+    tipe: [],
+    area_penggunaan: [],
+    warna: []
+  })
+  const [activeFilters, setActiveFilters] = useState<Record<string, string[]>>({
+    ukuran: [],
+    finish: [],
+    tipe: [],
+    area_penggunaan: [],
+    warna: [],
+    merk: [brandName] // Pre-set brand filter
+  })
+
+  useEffect(() => {
+    fetchFilterOptions()
+  }, [brandName])
+
+  const fetchFilterOptions = async () => {
+    try {
+      setLoading(true)
+      const { data: products, error } = await supabase
+        .from('ceramic_products')
+        .select('*')
+        .eq('merk', brandName)
+        .eq('is_published', true)
+
+      if (error) throw error
+
+      if (products) {
+        const options: Record<string, string[]> = {
+          ukuran: [...new Set(products.map((p: CeramicProduct) => p.ukuran).filter(Boolean) as string[])],
+          finish: [...new Set(products.map((p: CeramicProduct) => p.finish).filter(Boolean) as string[])],
+          tipe: [...new Set(products.map((p: CeramicProduct) => p.tipe).filter(Boolean) as string[])],
+          area_penggunaan: [...new Set(products.map((p: CeramicProduct) => p.area_penggunaan).filter(Boolean) as string[])],
+          warna: [...new Set(products.map((p: CeramicProduct) => p.warna).filter(Boolean) as string[])]
+        }
+        setFilterOptions(options)
+      }
+    } catch (error) {
+      console.error('Error fetching filter options:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleFilterChange = (category: string, value: string) => {
+    setActiveFilters(prev => {
+      const currentValues = prev[category] || []
+      const newValues = currentValues.includes(value)
+        ? currentValues.filter(item => item !== value)
+        : [...currentValues, value]
+      
+      return {
+        ...prev,
+        [category]: category === 'merk' ? [brandName] : newValues
+      }
+    })
+  }
+
+  const clearFilters = () => {
+    setActiveFilters({
+      ukuran: [],
+      finish: [],
+      tipe: [],
+      area_penggunaan: [],
+      warna: [],
+      merk: [brandName]
+    })
+  }
+
+  return (
+    <div 
+      className="min-h-screen"
+      style={{
+        backgroundColor: color,
+        backgroundImage: `url('/patterns/${pattern}.svg')`,
+        backgroundRepeat: 'repeat',
+        backgroundSize: '40px',
+        backgroundPosition: 'center',
+      }}
+    >
+      {/* Overlay gradient */}
+      <div className="absolute inset-0 bg-gradient-to-b from-white/50 via-transparent to-transparent pointer-events-none" />
+      
+      <div className="container mx-auto px-4 py-8 relative">
+        {/* Brand Header */}
+        <div className="text-center mb-12">
+          <div className="inline-block px-12 py-6 backdrop-blur-sm rounded-xl">
+            <h1 className="text-5xl font-bold text-gray-900 mb-4 font-playfair drop-shadow-lg">
+              {brandName}
+            </h1>
+            <p className="text-gray-800 text-xl font-inter drop-shadow">
+              Jelajahi koleksi lengkap keramik {brandName}
+            </p>
+          </div>
+        </div>
+
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+          {/* Filter Sidebar */}
+          <div className="lg:col-span-1 space-y-6 bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow-md border border-white/20">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-semibold text-gray-900">Filter</h2>
+              <button
+                onClick={clearFilters}
+                className="text-sm text-amber-600 hover:text-amber-700 transition-colors"
+              >
+                Reset
+              </button>
+            </div>
+
+            {/* Filter Sections */}
+            {Object.entries(filterOptions)
+              .filter(([category]) => category !== 'merk')
+              .map(([category, options]) => (
+                <div key={category} className="space-y-2">
+                  <h3 className="text-md font-medium text-gray-800 capitalize">
+                    {category.replace('_', ' ')}
+                  </h3>
+                  <div className="space-y-1">
+                    {options.map((option) => (
+                      <label
+                        key={option}
+                        className="flex items-center space-x-2 text-sm cursor-pointer group"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={activeFilters[category]?.includes(option) || false}
+                          onChange={() => handleFilterChange(category, option)}
+                          className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                        />
+                        <span className="text-gray-600 group-hover:text-amber-600 transition-colors">
+                          {option}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+            ))}
+          </div>
+
+          {/* Products Grid */}
+          <div className="lg:col-span-3">
+            {loading ? (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-600 mx-auto"></div>
+                <p className="mt-4 text-gray-600">Memuat produk...</p>
+              </div>
+            ) : (
+              <ProductGrid filters={activeFilters} />
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
